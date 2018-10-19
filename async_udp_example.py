@@ -5,58 +5,54 @@ import asyncio
 import socket
 import signal
 
-exitFlag = False
+# Graceful stop of all operations on SIGINT
+class StopException(BaseException): pass
 
 def stop(signal, frame):
-    print("Gracefully exiting")
-    global exitFlag
-    exitFlag = True
+    raise StopException
 
+signal.signal(signal.SIGINT, stop)
+
+# Generate random number for delay and convert it to string to send as a message
 async def generate_random_data():
     randomNumber = random.random()
     randomString = str(randomNumber)
     return randomNumber, randomString;
-    
+
+# Send random numbers as string to local port 11234 with the same random delay
 async def udp_random_sender():
     sendto_address = ('localhost', 11234)
     send_sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-    global exitFlag
-    while exitFlag == False:
+    while True:
         randomNumber, randomString = await generate_random_data()
         send_sock.sendto(randomString.encode(), sendto_address)
-        print("Sending %s" % (randomString))
         await asyncio.sleep(randomNumber)
-    send.sock.close()
 
-async def udp_string_receiver():
-    bind_adress = ('localhost', 11235)
-    listen_sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-    listen_sock.setblocking(0)
-    listen_sock.bind(bind_address)
-    listen_sock.listen(1)
-    global exitFlag
-    buffer = ""
-    while exitFlag == False:
-        readable, writable, exceptional = select.select([ listen_sock ], [], [ listen_sock ])
-        for s in readable:
-            data = s.recv(10)
-            if data:
-                buffer = buffer + data
-            else:
-                print("Received %s" % buffer.decode())
-                buffer = ""
-        for s in exceptional:
-            if s is listen_sock:
-                listen_sock.close()
-                listen_sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-                listen_sock.setblocking(0)
-                listen_sock.bind(bind_address)
-                listen_sock.listen(1)
-                buffer = ""
-    listen_sock.close()
+# receive strings on port 11235 and print them out
+class UdpReceiverProtocol:
+    def connection_made(self, transport):
+        self.transport = transport
 
-signal.signal(signal.SIGINT, stop)
+    def datagram_received(self, data, addr):
+        message = data.decode()
+        print(message)
 
 loop = asyncio.get_event_loop()
-loop.run_until_complete(udp_random_sender())
+
+# A protocol instance will serve all incoming datagrams
+listener = loop.create_datagram_endpoint(
+    UdpReceiverProtocol, local_addr=('127.0.0.1', 11235))
+transport, protocol = loop.run_until_complete(listener)
+
+try:
+    # Start both sender and receiver
+    loop.run_until_complete(udp_random_sender())
+
+    # Run forever or until SIGINT
+    loop.run_forever()
+
+except StopException:
+    pass
+
+transport.close()
 loop.close()
