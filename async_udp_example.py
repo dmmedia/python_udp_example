@@ -41,7 +41,8 @@ loop = asyncio.get_event_loop()
 
 # A protocol instance will serve all incoming datagrams
 listener = loop.create_datagram_endpoint(
-    UdpReceiverProtocol, local_addr=('127.0.0.1', 11235))
+        UdpReceiverProtocol, local_addr=('127.0.0.1', 11235)
+)
 transport, protocol = loop.run_until_complete(listener)
 
 try:
